@@ -15,7 +15,7 @@ CORS(app)
 
 # Load model and class labels once at the start
 MODEL_PATH = 'model/nutrient_cnn_model.h5'
-CLASS_LABELS = ['healthy', 'nitrogen-N', 'phosphorus-P', 'potasium-K']
+CLASS_LABELS = ['healthy', 'nitrogen-N', 'phosphorus-P', 'potassium-K']
 model = tf.keras.models.load_model(MODEL_PATH)
 
 @app.route('/')
