@@ -1,0 +1,6 @@
+Flask
+rembg
+Pillow
+onnxruntime
+flask-cors
+tensorflow
