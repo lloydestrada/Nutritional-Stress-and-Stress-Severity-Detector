@@ -211,7 +211,7 @@
             resultBox.textContent = `Class: ${predictedClass}`;
 
             if (predictedClass.toLowerCase() !== "healthy") {
-              // 1. Visual stress highlight
+              // Visual stress highlight
               fetch("/process_image", {
                 method: "POST",
                 body: formData,
@@ -232,18 +232,38 @@
                   stressImagePreview.innerHTML = "Error loading image";
                 });
 
-              // 2. Predict severity
+              // Predict severity
               fetch("/predict_severity", {
                 method: "POST",
                 body: formData,
               })
                 .then((res) => res.json())
                 .then((severityData) => {
-                  if (severityData.severity_class) {
-                    resultBox.textContent += `\nSeverity: ${severityData.severity_class}`;
-                  } else {
-                    resultBox.textContent += `\nSeverity: Unable to determine`;
-                  }
+                  const severityClass =
+                    severityData.severity_class || "unknown";
+                  resultBox.textContent += `\nSeverity: ${severityClass}`;
+
+                  // Get recommendation
+                  fetch("/get_recommendation", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      nutrient: predictedClass,
+                      severity: severityClass,
+                    }),
+                  })
+                    .then((res) => res.json())
+                    .then((recData) => {
+                      if (recData.recommendation) {
+                        resultBox.textContent += `\nRecommendation: ${recData.recommendation}`;
+                      }
+                    })
+                    .catch((err) => {
+                      console.error("Recommendation error:", err);
+                      resultBox.textContent += `\nRecommendation: Error fetching recommendation`;
+                    });
                 })
                 .catch((err) => {
                   console.error("Severity error:", err);
@@ -252,6 +272,40 @@
             } else {
               stressImagePreview.innerHTML =
                 "No stress detected (Healthy leaf)";
+
+              // For healthy leaves, we still fetch severity to give full info
+              fetch("/predict_severity", {
+                method: "POST",
+                body: formData,
+              })
+                .then((res) => res.json())
+                .then((severityData) => {
+                  const severityClass =
+                    severityData.severity_class || "healthy";
+                  resultBox.textContent += `\nSeverity: ${severityClass}`;
+
+                  // Get recommendation for healthy cases
+                  fetch("/get_recommendation", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      class: predictedClass,
+                      severity: severityClass,
+                    }),
+                  })
+                    .then((res) => res.json())
+                    .then((recData) => {
+                      if (recData.recommendation) {
+                        resultBox.textContent += `\nRecommendation: ${recData.recommendation}`;
+                      }
+                    })
+                    .catch((err) => {
+                      console.error("Recommendation error:", err);
+                      resultBox.textContent += `\nRecommendation: Error fetching recommendation`;
+                    });
+                });
             }
           })
           .catch((err) => {

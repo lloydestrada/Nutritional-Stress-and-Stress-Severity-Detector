@@ -23,6 +23,22 @@ SEVERITY_MODEL_PATH = 'model/Severity_Main1.h5'
 SEVERITY_CLASS_LABELS = ['Healthy', 'High', 'Low', 'Medium']
 severity_model = tf.keras.models.load_model(SEVERITY_MODEL_PATH)
 
+recommendations = {
+    "healthy_healthy": "Your coffee plant is healthy. No action needed.",
+    "nitrogen-n_low": "Apply a nitrogen-rich fertilizer (e.g., urea or ammonium sulfate) and incorporate organic compost to improve soil fertility.",
+    "nitrogen-n_medium": "Supplement nitrogen with organic manure or foliar sprays. Monitor leaf color over time.",
+    "nitrogen-n_high": "Apply quick-release nitrogen sources and prune affected leaves to prevent spread.",
+    "phosphorus-p_low": "Use phosphorus-based fertilizers like superphosphate. Ensure soil pH is within 6-7 for better absorption.",
+    "phosphorus-p_medium": "Use rock phosphate or composted manure to gradually boost phosphorus levels.",
+    "phosphorus-p_high": "Apply phosphoric acid foliar sprays and remove severely affected leaves.",
+    "potassium-k_low": "Apply potassium sulfate or wood ash. Water consistently to improve nutrient uptake.",
+    "potassium-k_medium": "Use balanced NPK fertilizers with higher K ratio. Avoid water stress.",
+    "potassium-k_high": "Incorporate muriate of potash (KCl) and use mulch to retain soil moisture.",
+    "healthy_high": "No nutrient issues, but signs of high stress. Consider improving shading, irrigation, and pest control.",
+    "healthy_medium": "Moderate stress detected. Monitor regularly for emerging symptoms.",
+    "healthy_low": "Mild stress detected. Maintain consistent care and nutrients."
+}
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -48,7 +64,7 @@ def predict_deficiency():
         predicted_label = NUTRIENT_CLASS_LABELS[predicted_index]
 
         return jsonify({'class': predicted_label})
-    
+
     except Exception as e:
         return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
 
@@ -73,15 +89,27 @@ def predict_severity():
         predicted_label = SEVERITY_CLASS_LABELS[predicted_index]
 
         return jsonify({'severity_class': predicted_label})
-    
+
     except Exception as e:
         return jsonify({'error': f'Severity prediction failed: {str(e)}'}), 500
+
+@app.route('/get_recommendation', methods=['POST'])
+def get_recommendation():
+    data = request.json
+    nutrient = data.get("nutrient")
+    severity = data.get("severity")
+    if not nutrient or not severity:
+        return jsonify({"error": "Missing nutrient or severity value"}), 400
+
+    key = f"{nutrient.lower()}_{severity.lower()}"
+    recommendation = recommendations.get(key, "No specific recommendation found.")
+    return jsonify({"recommendation": recommendation})
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
     if 'image' not in request.files:
         return jsonify({"error": "No file part"}), 400
-    
+
     file = request.files['image']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
@@ -102,11 +130,9 @@ def process_image():
     gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
     _, leaf_mask = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
 
-    # Erode the leaf mask to remove edges
     kernel = np.ones((5, 5), np.uint8)
     eroded_leaf_mask = cv2.erode(leaf_mask, kernel, iterations=3)
 
-    # Apply CLAHE for contrast enhancement
     lab = cv2.cvtColor(image_np, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -114,20 +140,16 @@ def process_image():
     lab = cv2.merge((l, a, b))
     image_clahe = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
-    # Convert to HSV and YCrCb color spaces
     hsv = cv2.cvtColor(image_clahe, cv2.COLOR_RGB2HSV)
     ycrcb = cv2.cvtColor(image_clahe, cv2.COLOR_RGB2YCrCb)
 
-    # Define HSV range for healthy green leaves
     lower_green = np.array([30, 40, 40])
     upper_green = np.array([90, 255, 255])
     healthy_mask = cv2.inRange(hsv, lower_green, upper_green)
 
-    # Extract Cr (YCrCb) and A (LAB) channels
     cr_channel = ycrcb[:, :, 1]
     a_channel = lab[:, :, 1]
 
-    # Detect diseased areas
     non_green_mask = cv2.bitwise_not(healthy_mask)
     non_green_mask = cv2.medianBlur(non_green_mask, 5)
 
@@ -138,16 +160,13 @@ def process_image():
     disease_mask = cv2.bitwise_and(disease_mask, non_green_mask)
     disease_mask = cv2.bitwise_and(disease_mask, eroded_leaf_mask)
 
-    # Clean noise
     kernel = np.ones((3, 3), np.uint8)
     disease_mask = cv2.morphologyEx(disease_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
     disease_mask = cv2.morphologyEx(disease_mask, cv2.MORPH_OPEN, kernel, iterations=1)
 
-    # Highlight diseased areas
     image_highlighted = image_np.copy()
     image_highlighted[disease_mask == 255] = [255, 0, 0]
 
-    # Convert image back to PIL for return
     image_highlighted_pil = Image.fromarray(image_highlighted)
     img_byte_arr = io.BytesIO()
     image_highlighted_pil.save(img_byte_arr, format='PNG')
