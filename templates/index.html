@@ -55,17 +55,20 @@
         justify-content: center;
         align-items: flex-start;
         margin-bottom: 2rem;
+        flex-wrap: wrap;
       }
 
       .image-box {
         text-align: center;
+        width: 400px;
+        height: 400px;
       }
 
       .image-box img {
-        width: 250px;
-        height: auto;
+        max-width: 100%;
+        max-height: 100%;
         border-radius: 10px;
-        margin-bottom: 0.5rem;
+        object-fit: contain;
       }
 
       .upload-btn {
@@ -77,21 +80,25 @@
         border: none;
         cursor: pointer;
       }
+
       .nav a {
         text-decoration: none;
         color: inherit;
       }
+
       .image-placeholder {
-        width: 250px;
-        height: 150px;
+        width: 100%;
+        height: 100%;
         background-color: #f0f0f0;
         border-radius: 10px;
-        margin-bottom: 0.5rem;
+        overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: center;
         color: #888;
         font-size: 0.9rem;
+        position: relative;
+        max-height: 400px;
       }
     </style>
   </head>
@@ -106,17 +113,15 @@
 
     <main>
       <h1>
-        Nutrient Deficiency and Stress Severity Detection of Coffee leaves
+        Nutrient Deficiency and Stress Severity Detection of Coffee Leaves
       </h1>
 
       <div class="image-section">
         <!-- Original Image Upload -->
-        <div class="image-box" style="width: 400px; height: 400px">
-          <div
-            class="image-placeholder"
-            id="original-image-preview"
-            style="width: 100%; height: 100%"
-          ></div>
+        <div class="image-box">
+          <div class="image-placeholder" id="original-image-preview">
+            Image preview will appear here
+          </div>
           <p>Original Image</p>
           <input type="file" id="image-upload" style="display: none" />
           <button
@@ -128,29 +133,26 @@
         </div>
 
         <!-- Stress Severity Detection -->
-        <div class="image-box" style="width: 400px; height: 400px">
-          <div
-            class="image-placeholder"
-            id="stress-image-preview"
-            style="width: 100%; height: 100%"
-          ></div>
+        <div class="image-box">
+          <div class="image-placeholder" id="stress-image-preview">
+            Stress-highlighted image
+          </div>
           <p>Stress Severity</p>
           <button class="upload-btn" onclick="detectStressSeverity()">
             Detect
           </button>
         </div>
+
         <!-- Nutrient Classification Result -->
-        <div class="image-box" style="width: 400px; height: 400px">
+        <div class="image-box">
           <div
             class="image-placeholder"
             id="classification-result"
             style="
-              width: 100%;
-              height: 100%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
               font-size: 1.2rem;
+              text-align: center;
+              padding: 1rem;
+              flex-direction: column;
             "
           >
             Prediction will appear here
@@ -159,79 +161,105 @@
         </div>
       </div>
     </main>
+
+    <script>
+      document
+        .getElementById("image-upload")
+        .addEventListener("change", function (event) {
+          const file = event.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+              const preview = document.getElementById("original-image-preview");
+              preview.innerHTML = "";
+              const img = document.createElement("img");
+              img.src = e.target.result;
+              img.style.maxWidth = "100%";
+              img.style.maxHeight = "100%";
+              img.style.objectFit = "contain";
+              preview.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+
+      function detectStressSeverity() {
+        const fileInput = document.getElementById("image-upload");
+        if (fileInput.files.length === 0) {
+          alert("Please upload an image first");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("image", fileInput.files[0]);
+
+        const stressImagePreview = document.getElementById(
+          "stress-image-preview"
+        );
+        const resultBox = document.getElementById("classification-result");
+        stressImagePreview.innerHTML = "Processing...";
+        resultBox.textContent = "Classifying...";
+
+        // Predict deficiency
+        fetch("/predict_deficiency", {
+          method: "POST",
+          body: formData,
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            const predictedClass = data.class;
+            resultBox.textContent = `Class: ${predictedClass}`;
+
+            if (predictedClass.toLowerCase() !== "healthy") {
+              // 1. Visual stress highlight
+              fetch("/process_image", {
+                method: "POST",
+                body: formData,
+              })
+                .then((response) => response.blob())
+                .then((imageBlob) => {
+                  const imageURL = URL.createObjectURL(imageBlob);
+                  stressImagePreview.innerHTML = "";
+                  const img = document.createElement("img");
+                  img.src = imageURL;
+                  img.style.maxWidth = "100%";
+                  img.style.maxHeight = "100%";
+                  img.style.objectFit = "contain";
+                  stressImagePreview.appendChild(img);
+                })
+                .catch((error) => {
+                  console.error("Error:", error);
+                  stressImagePreview.innerHTML = "Error loading image";
+                });
+
+              // 2. Predict severity
+              fetch("/predict_severity", {
+                method: "POST",
+                body: formData,
+              })
+                .then((res) => res.json())
+                .then((severityData) => {
+                  if (severityData.severity_class) {
+                    resultBox.textContent += `\nSeverity: ${severityData.severity_class}`;
+                  } else {
+                    resultBox.textContent += `\nSeverity: Unable to determine`;
+                  }
+                })
+                .catch((err) => {
+                  console.error("Severity error:", err);
+                  resultBox.textContent += `\nSeverity: Error`;
+                });
+            } else {
+              stressImagePreview.innerHTML =
+                "No stress detected (Healthy leaf)";
+            }
+          })
+          .catch((err) => {
+            console.error(err);
+            resultBox.textContent = "Error! Could not classify.";
+            stressImagePreview.innerHTML = "Stress detection skipped";
+          });
+      }
+    </script>
   </body>
 </html>
-<script>
-  document
-    .getElementById("image-upload")
-    .addEventListener("change", function (event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const preview = document.getElementById("original-image-preview");
-          preview.style.backgroundImage = `url('${e.target.result}')`;
-          preview.style.backgroundSize = "cover";
-          preview.style.backgroundPosition = "center";
-          preview.textContent = "";
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-
-  function detectStressSeverity() {
-    const fileInput = document.getElementById("image-upload");
-    if (fileInput.files.length === 0) {
-      alert("Please upload an image first");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("image", fileInput.files[0]);
-
-    const stressImagePreview = document.getElementById("stress-image-preview");
-    const resultBox = document.getElementById("classification-result");
-    stressImagePreview.innerHTML = "Processing...";
-    resultBox.textContent = "Classifying...";
-
-    //Predict deficiency
-    fetch("/predict_deficiency", {
-      method: "POST",
-      body: formData,
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        const predictedClass = data.class;
-        resultBox.textContent = `Class: ${predictedClass}`;
-
-        //Only perform stress detection if not healthy
-        if (predictedClass.toLowerCase() !== "healthy") {
-          fetch("/process_image", {
-            method: "POST",
-            body: formData,
-          })
-            .then((response) => response.blob())
-            .then((imageBlob) => {
-              const imageURL = URL.createObjectURL(imageBlob);
-              stressImagePreview.innerHTML = "";
-              const img = document.createElement("img");
-              img.src = imageURL;
-              img.style.width = "100%";
-              img.style.height = "100%";
-              stressImagePreview.appendChild(img);
-            })
-            .catch((error) => {
-              console.error("Error:", error);
-              stressImagePreview.innerHTML = "Error loading image";
-            });
-        } else {
-          stressImagePreview.innerHTML = "No stress detected (Healthy leaf)";
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        resultBox.textContent = "Error! Could not classify.";
-        stressImagePreview.innerHTML = "Stress detection skipped";
-      });
-  }
-</script>

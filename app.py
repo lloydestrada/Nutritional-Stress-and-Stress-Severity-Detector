@@ -13,14 +13,69 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Load model and class labels once at the start
-MODEL_PATH = 'model/nutrient_cnn_model.h5'
-CLASS_LABELS = ['healthy', 'nitrogen-N', 'phosphorus-P', 'potassium-K']
-model = tf.keras.models.load_model(MODEL_PATH)
+# Load nutrient deficiency model
+NUTRIENT_MODEL_PATH = 'model/nutrient_cnn_model.h5'
+NUTRIENT_CLASS_LABELS = ['healthy', 'nitrogen-N', 'phosphorus-P', 'potassium-K']
+nutrient_model = tf.keras.models.load_model(NUTRIENT_MODEL_PATH)
+
+# Load severity model
+SEVERITY_MODEL_PATH = 'model/Severity_Main1.h5'
+SEVERITY_CLASS_LABELS = ['Healthy', 'High', 'Low', 'Medium']
+severity_model = tf.keras.models.load_model(SEVERITY_MODEL_PATH)
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/predict_deficiency', methods=['POST'])
+def predict_deficiency():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No selected image'}), 400
+
+    try:
+        img = Image.open(file.stream).convert('RGB')
+        img = img.resize((224, 224))
+        img_array = keras_image.img_to_array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = img_array / 255.0
+
+        predictions = nutrient_model.predict(img_array)
+        predicted_index = np.argmax(predictions, axis=1)[0]
+        predicted_label = NUTRIENT_CLASS_LABELS[predicted_index]
+
+        return jsonify({'class': predicted_label})
+    
+    except Exception as e:
+        return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
+
+@app.route('/predict_severity', methods=['POST'])
+def predict_severity():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No selected image'}), 400
+
+    try:
+        img = Image.open(file.stream).convert('RGB')
+        img = img.resize((224, 224))
+        img_array = keras_image.img_to_array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = img_array / 255.0
+
+        predictions = severity_model.predict(img_array)
+        predicted_index = np.argmax(predictions, axis=1)[0]
+        predicted_label = SEVERITY_CLASS_LABELS[predicted_index]
+
+        return jsonify({'severity_class': predicted_label})
+    
+    except Exception as e:
+        return jsonify({'error': f'Severity prediction failed: {str(e)}'}), 500
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
@@ -99,33 +154,6 @@ def process_image():
     img_byte_arr.seek(0)
 
     return send_file(img_byte_arr, mimetype='image/png')
-
-
-@app.route('/predict_deficiency', methods=['POST'])
-def predict_deficiency():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
-
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No selected image'}), 400
-
-    try:
-        img = Image.open(file.stream).convert('RGB')
-        img = img.resize((224, 224))
-        img_array = keras_image.img_to_array(img)
-        img_array = np.expand_dims(img_array, axis=0)
-        img_array = img_array / 255.0
-
-        predictions = model.predict(img_array)
-        predicted_index = np.argmax(predictions, axis=1)[0]
-        predicted_label = CLASS_LABELS[predicted_index]
-
-        return jsonify({'class': predicted_label})
-    
-    except Exception as e:
-        return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=True)
