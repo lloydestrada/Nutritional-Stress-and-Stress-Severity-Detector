@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ML Coffee Leaf Detection</title>
+    <title>Coffee Leaf Analyzer</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
       rel="stylesheet"
@@ -191,41 +191,47 @@
 
     const stressImagePreview = document.getElementById("stress-image-preview");
     const resultBox = document.getElementById("classification-result");
-    stressImagePreview.innerHTML = "Processing image...";
+    stressImagePreview.innerHTML = "Processing...";
     resultBox.textContent = "Classifying...";
 
-    // Stress Detection
-    fetch("/process_image", {
-      method: "POST",
-      body: formData,
-    })
-      .then((response) => response.blob())
-      .then((imageBlob) => {
-        const imageURL = URL.createObjectURL(imageBlob);
-        stressImagePreview.innerHTML = "";
-        const img = document.createElement("img");
-        img.src = imageURL;
-        img.style.width = "100%";
-        img.style.height = "100%";
-        stressImagePreview.appendChild(img);
-      })
-      .catch((error) => {
-        console.error("Error:", error);
-        stressImagePreview.innerHTML = "Error loading image";
-      });
-
-    // Nutrient Deficiency Prediction
+    //Predict deficiency
     fetch("/predict_deficiency", {
       method: "POST",
       body: formData,
     })
       .then((res) => res.json())
       .then((data) => {
-        resultBox.textContent = `Class: ${data.class}`;
+        const predictedClass = data.class;
+        resultBox.textContent = `Class: ${predictedClass}`;
+
+        //Only perform stress detection if not healthy
+        if (predictedClass.toLowerCase() !== "healthy") {
+          fetch("/process_image", {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => response.blob())
+            .then((imageBlob) => {
+              const imageURL = URL.createObjectURL(imageBlob);
+              stressImagePreview.innerHTML = "";
+              const img = document.createElement("img");
+              img.src = imageURL;
+              img.style.width = "100%";
+              img.style.height = "100%";
+              stressImagePreview.appendChild(img);
+            })
+            .catch((error) => {
+              console.error("Error:", error);
+              stressImagePreview.innerHTML = "Error loading image";
+            });
+        } else {
+          stressImagePreview.innerHTML = "No stress detected (Healthy leaf)";
+        }
       })
       .catch((err) => {
         console.error(err);
         resultBox.textContent = "Error! Could not classify.";
+        stressImagePreview.innerHTML = "Stress detection skipped";
       });
   }
 </script>
